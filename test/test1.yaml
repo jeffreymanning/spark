@@ -1,0 +1,68 @@
+kind: Template
+apiVersion: v1
+template: spark-cluster-test1
+metadata:
+  name: spark-cluster-test1
+labels:
+  app: spark-cluster-test1
+objects:
+
+- kind: DeploymentConfig
+  apiVersion: v1
+  metadata:
+    name: ${API_NAME}
+    labels:
+      cluster: ${CLUSTER_NAME}
+      type: api
+  spec:
+    strategy:
+      type: Rolling
+    triggers:
+      - type: ConfigChange
+    replicas: 1
+    selector:
+      name: ${API_NAME}
+    template:
+      metadata:
+        labels:
+          name: ${API_NAME}
+      spec:
+        containers:
+          - name: ${API_NAME}
+            image: ${API_IMAGE}
+            imagePullPolicy: "Always"
+            env:
+              - name: SPARK_API
+                value: "true"
+
+parameters:
+- name: SPARK_IMAGE
+  description: Name of the Spark master/worker image
+  value: docker.io/jeffreymanning/spark-base:latest
+- name: CLUSTER_NAME
+  description: name of cluster - applicable to spark infrastructure
+  generate: expression
+  from: "cluster-[a-z0-9]{4}"
+  required: true
+- name: MASTER_NAME
+  description: master name used as a service name and a selector
+  generate: expression
+  from: "spark-master-[a-z0-9]{4}"
+  required: true
+- name: WORKER_NAME
+  description: worker name used as a selector
+  generate: expression
+  from: "spark-worker-[a-z0-9]{4}"
+  required: true
+- name: WORKER_RELICAS
+  description: worker replica count
+  value: "3"
+  required: true
+- name: API_NAME
+  description: name of api node - spark-submit, spark-class command line operations
+  generate: expression
+  from: "api-node-[a-z0-9]{4}"
+  required: true
+- name: API_IMAGE
+  description: Name of the API image (submit or shell)
+  value: docker.io/jeffreymanning/centos7-base:latest
