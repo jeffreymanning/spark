@@ -5,8 +5,13 @@
 
 # move over the existing /etc/passwd into our temp
 cat /etc/passwd > ${NSS_WRAPPER_PASSWD}
-echo "$(id -u):x:$(id -u):$(id -g):dynamic uid:$SPARK_HOME:/bin/false" >> ${NSS_WRAPPER_PASSWD}
+cat /etc/group > ${NSS_WRAPPER_GROUP}
+#echo "$(id -u):x:$(id -u):$(id -g):dynamic uid:$SPARK_HOME:/bin/false" >> ${NSS_WRAPPER_PASSWD}
 
-export LD_PRELOAD=${LD_PRELOAD}:libnss_wrapper.so
+# add the user name to the last line; will always be /opt/spark (due to launch)
+echo "$(id -u):x:$(id -u):$(id -g):$(id -u):$SPARK_HOME:/bin/false" >> ${NSS_WRAPPER_PASSWD}
+#     ${USER_NAME}:x:${USER_ID}:${GROUP_ID}:${USER_NAME}:${HOME}:/bin/bash
+
+export LD_PRELOAD=libnss_wrapper.so
 
 exec "$@"

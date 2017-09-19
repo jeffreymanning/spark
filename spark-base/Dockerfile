@@ -1,15 +1,26 @@
 FROM jeffreymanning/centos7-base
 
 MAINTAINER Jeff Manning
+LABEL name="spark-base" \
+      vendor="MITRE Corp" \
+      version="2.1" \
+      release="1" \
+      summary="MITRE's base spark image - ${version}.${release}" \
+      description="Centos7, spark ${version}.${release} base image for master worker api nodes" \
+### Required labels above - recommended below
+      io.k8s.description="Centos, Spark 2.1.1 base image, non-executable" \
+      io.k8s.display-name="centos, spark ${version}.${release}" \
+      io.openshift.expose-services="" \
+      io.openshift.tags="centos7,spark,java,maven"
 
 USER root
 
 #install the basic packages - nss_wrapper requires epel
 RUN yum clean all
-RUN yum install -y epel-release && yum -y update && yum clean all && rm -rf /var/cache/yum
+RUN yum install -y epel-release && yum -y update && yum clean all -y && rm -rf /var/cache/yum
 
 # spark pre-reqs...  if no hadoop, need log4j to install
-RUN yum -y install nss_wrapper gettext numpy && yum clean all
+# none yet
 
 ## Install Spark
 ARG SPARK_MAJOR_VERSION=2
@@ -33,24 +44,26 @@ RUN cd /opt && \
     ln -s $DISTRO_NAME spark
 
 # setup the environment variables for Spark
-ENV PATH=$PATH:/opt/spark/bin
 ENV SPARK_HOME=/opt/spark
+ENV PATH=$PATH:${SPARK_HOME}/bin
 
 # Adding jmx by default
 COPY metrics /opt/spark
 
-# Configuration BLOCK
-# Configure Spark
+# Configure spark (conf dir files)
 COPY scripts /tmp/scripts
 RUN [ "bash", "-x", "/tmp/scripts/spark/install" ]
 
 #cleanp scripts
 RUN rm -rf /tmp/scripts
 
-# change ownership to the spark process (non-root)
-#RUN chown -R -L spark:spark ${SPARK_HOME}
+### Setup user for build execution and application runtime
+# see https://github.com/RHsyseng/container-rhel-examples/blob/master/starter-epel/Dockerfile
+RUN mkdir -p ${SPARK_HOME}/bin2
+COPY bin/run ${SPARK_HOME}/bin2/
+RUN chmod -R ug+x ${SPARK_HOME}/bin2 && sync
 
-####  NSS Wrapper setup
+####  NSS Wrapper setup (moved to spark-node)
 # NSS Wrapper to modify /etc/passwd so arbitrary UIDs (185 above) can run and still have a username.
 # Useful in environments such as Openshift which randomise the UID for each container
 # Use the $USER_NAME environment variable to configure the name for the user.
@@ -62,26 +75,15 @@ RUN rm -rf /tmp/scripts
 # looks to be an issue with OS login of users..
 # see  https://stackoverflow.com/questions/41864985/hadoop-ioexception-failure-to-login
 #
-#RUN groupadd -r spark && useradd -r -s /bin/false -d ${SPARK_HOME} -u 185 -g spark spark
-#RUN usermod -aG wheel spark
-#USER 185
-##ENV USER_NAME=185
-##USER spark
-##ENV USER_NAME=spark
-#ENV NSS_WRAPPER_PASSWD=/tmp/passwd
-#ENV NSS_WRAPPER_GROUP=/etc/group
-#RUN touch ${NSS_WRAPPER_PASSWD}  && \
-#    chgrp 0 ${NSS_WRAPPER_PASSWD} && \
-#    chmod g+rw ${NSS_WRAPPER_PASSWD}
+
+# not meant to be dxirectly run..; spark node is meant to be run
+#USER spark
+#WORKDIR ${SPARK_HOME}
 #
-## Make the default PWD somewhere that the user can write. This is
-## useful when connecting with 'oc run' and starting a 'spark-shell',
-## which will likely try to create files and directories in PWD and
-## error out if it cannot.
-#WORKDIR /tmp
+#### NSS_WRAPPER for user name recognition at runtime w/ an arbitrary uid - for OpenShift deployments
+#ENTRYPOINT [ "/entrypoint" ]
 #
-## entrypoint actually adds user to NSS_WRAPPER_PASSWD (185 and group 185)
-#ENTRYPOINT ["/entrypoint"]
-#
-## Start the main process
-#CMD ["/opt/spark/bin/launch.sh"]
+### Start the main process (app-root from base)
+#CMD run
+
+CMD ${SPARK_HOME}/bin2/run

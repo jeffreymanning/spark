@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# spark likes to be able to lookup a username for the running UID, if
+# no name is present fake it.
+
+# move over the existing /etc/passwd into our temp
+cat /etc/passwd > ${NSS_WRAPPER_PASSWD}
+cat /etc/group > ${NSS_WRAPPER_GROUP}
+
+export USER_ID=$(id -u)
+export GROUP_ID=$(id -g)
+
+#echo "$(id -u):x:$(id -u):$(id -g):dynamic uid:$SPARK_HOME:/bin/false" >> ${NSS_WRAPPER_PASSWD}
+#     ${USER_NAME}:x:${USER_ID}:${GROUP_ID}:${USER_NAME}:${HOME}:/bin/bash
+#export LD_PRELOAD=/usr/lib64/libnss_wrapper.so
+
+# add the user name to the last line; regardless, it must home out to /opt/spark (i.e., SPARK_HOME)
+#echo "$(id -u):x:$(id -u):$(id -g):$(id -u):$SPARK_HOME:/bin/false" >> ${NSS_WRAPPER_PASSWD}
+export LD_PRELOAD=libnss_wrapper.so
+if ! whoami &> /dev/null; then
+  if [ -w ${NSS_WRAPPER_PASSWD}  ]; then
+    echo "${USER_NAME:-default}:x:$(id -u):0:${USER_NAME:-default} user:${SPARK_HOME}:/sbin/nologin" >> ${NSS_WRAPPER_PASSWD}
+  fi
+fi
+exec "$@"
