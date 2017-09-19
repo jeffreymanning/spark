@@ -7,6 +7,10 @@ labels:
   app: spark-pv-cluster
 objects:
 
+##################################################################################
+# Define the Gluster Cluster (see gluster-cluster.yaml)
+##################################################################################
+## setup gluster endpoints; this is the previously setup gluster cluster
 # setup the Persistent Volumes that will be claimed by analytics
 # note path is the name of the volume.
 - kind: PersistentVolume
@@ -24,7 +28,7 @@ objects:
       - ReadWriteMany
     glusterfs:
       endpoints: glusterfs-cluster
-      path: scratch
+      path: /scratch
       readOnly: false
     persistentVolumeReclaimPolicy: Retain
 
@@ -43,10 +47,12 @@ objects:
       - ReadWriteMany
     glusterfs:
       endpoints: glusterfs-cluster
-      path: logs
+      path: /logs
       readOnly: false
     persistentVolumeReclaimPolicy: Retain
 
+# mapped to PV by access mode
+# mapped to "pod" by name in volumes section
 - kind: PersistentVolumeClaim
   apiVersion: v1
   metadata:
@@ -72,11 +78,14 @@ objects:
       gluster-cluster: glusterfs-cluster
   spec:
     accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
     resources:
        requests:
          storage: 5Gi
 
+##################################################################################
+# Define the Compute (Spark) Cluster
+##################################################################################
 - kind: Service
   apiVersion: v1
   metadata:
@@ -119,20 +128,6 @@ objects:
       name: ${ZEPPELIN_NAME}
     type: LoadBalancer
 
-- kind: Service
-  apiVersion: v1
-  metadata:
-    name: ${ZEPPELIN_NAME}-spark-ui
-    labels:
-      name: ${MASTER_NAME}
-  spec:
-    ports:
-      - port: 4040
-        targetPort: 4040
-    selector:
-      name: ${ZEPPELIN_NAME}
-    type: LoadBalancer
-
 # Unsecure Route...  Need to research secure routes
 #- kind: Route
 #  apiVersion: v1
@@ -146,7 +141,40 @@ objects:
 #      name: ${ZEPPELIN_NAME}
 #    tls:
 #      termination: edge
-
+# 1) naming is local to this DeploymentConfig
+# volumeMounts:
+#  - name: glusterfs-data
+#
+# must match
+#
+# volumes:
+#  - name: glusterfs-data
+#
+# 2) Access to gluster volumes
+# determine ACL (group)
+#    $ ls -lZ /mnt/glusterfs/
+#    drwxrwx---. yarn hadoop system_u:object_r:fusefs_t:s0    HadoopVol
+#
+#    $ id yarn
+#    uid=592(yarn) gid=590(hadoop) groups=590(hadoop)
+#
+#        securityContext:
+#          supplementalGroups: [590]
+# 3) privileged accounts
+#            securityContext:
+#              privileged: true
+# requires a privileged account
+# see https://adam.younglogic.com/2017/06/creating-a-privileged-container-in-openshift/
+#
+# oc create serviceaccount -n <my-namespace> <my-privilegeduser>
+# oc adm policy add-scc-to-user privileged -n <my-namespace> -z <my-privilegeduser>
+# add to template (pod...)
+#    serviceAccountName:
+#      privilegeduser
+#
+# or (dangerous)
+#
+# oc adm policy add-scc-to-user privileged -n <my-namespace> -z default
 - kind: DeploymentConfig
   apiVersion: v1
   metadata:
@@ -182,10 +210,12 @@ objects:
               - containerPort: 8080
                 protocol: TCP
             volumeMounts:
-              - mountPath: /mnt/data
-                name: glusterfsdata
-              - mountPath: /mnt/logs
-                name: glusterfslogs
+              - name: glusterfsdata
+                mountPath: /mnt/data
+              - name: glusterfslogs
+                mountPath: /mnt/logs
+        securityContext:
+          supplementalGroups: [0, 185]
         volumes:
           - name: glusterfsdata
             persistentVolumeClaim:
@@ -224,10 +254,12 @@ objects:
               - name: SPARK_MASTER_UI_ADDRESS
                 value: http://${MASTER_NAME}-webui:8080
             volumeMounts:
-              - mountPath: /mnt/data
-                name: glusterfsdata
-              - mountPath: /mnt/logs
-                name: glusterfslogs
+              - name: glusterfsdata
+                mountPath: /mnt/data
+              - name: glusterfslogs
+                mountPath: /mnt/logs
+        securityContext:
+          supplementalGroups: [0, 185]
         volumes:
           - name: glusterfsdata
             persistentVolumeClaim:
@@ -235,6 +267,23 @@ objects:
           - name: glusterfslogs
             persistentVolumeClaim:
               claimName: ${MASTER_NAME}-logs
+
+##################################################################################
+# Define the Compute (Spark) Cluster
+##################################################################################
+- kind: Service
+  apiVersion: v1
+  metadata:
+    name: ${ZEPPELIN_NAME}-spark-ui
+    labels:
+      name: ${MASTER_NAME}
+  spec:
+    ports:
+      - port: 4040
+        targetPort: 4040
+    selector:
+      name: ${ZEPPELIN_NAME}
+    type: LoadBalancer
 
 - kind: DeploymentConfig
   apiVersion: v1
@@ -275,10 +324,12 @@ objects:
               - name: ZEPPELIN_SPARK_USEHIVECONTEXT
                 value: "false"
             volumeMounts:
-              - mountPath: /mnt/data
-                name: glusterfsdata
-              - mountPath: /mnt/logs
-                name: glusterfslogs
+              - name: glusterfsdata
+                mountPath: /mnt/data
+              - name: glusterfslogs
+                mountPath: /mnt/logs
+        securityContext:
+          supplementalGroups: [0, 185]
         volumes:
           - name: glusterfsdata
             persistentVolumeClaim:
@@ -286,6 +337,7 @@ objects:
           - name: glusterfslogs
             persistentVolumeClaim:
               claimName: ${MASTER_NAME}-logs
+
 # R-Studio, if we define a  mount point, will make this the R_USER_LIBS.
 # will then survive restarts (nop
 - kind: Service
@@ -339,10 +391,12 @@ objects:
               - containerPort: 8787
                 protocol: TCP
             volumeMounts:
-              - mountPath: /mnt/data
-                name: glusterfsdata
-              - mountPath: /mnt/logs
-                name: glusterfslogs
+              - name: glusterfsdata
+                mountPath: /mnt/data
+              - name: glusterfslogs
+                mountPath: /mnt/logs
+        securityContext:
+          supplementalGroups: [0, 185]
         volumes:
           - name: glusterfsdata
             persistentVolumeClaim:
@@ -350,7 +404,9 @@ objects:
           - name: glusterfslogs
             persistentVolumeClaim:
               claimName: ${MASTER_NAME}-logs
-
+##################################################################################
+# Parameter Block
+##################################################################################
 parameters:
 - name: SPARK_IMAGE
   description: Name of the Spark master/worker image

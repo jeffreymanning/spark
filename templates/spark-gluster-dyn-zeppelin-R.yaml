@@ -281,7 +281,7 @@ objects:
 parameters:
 - name: SPARK_IMAGE
   description: Name of the Spark master/worker image
-  value: docker.io/jeffreymanning/spark-base:latest
+  value: docker.io/jeffreymanning/spark-node:latest
 - name: CLUSTER_NAME
   description: name of cluster - applicable to spark infrastructure
   generate: expression
@@ -309,7 +309,7 @@ parameters:
   required: true
 - name: ZEPPELIN_IMAGE
   description: Name of the Zeppelin interface
-  value: docker.io/jeffreymanning/zeppelin:latest
+  value: docker.io/jeffreymanning/zeppelin-src:latest
 ###  R-studio installation
 - name: RSTUDIO_IMAGE
   description: Name of the r-studio api image

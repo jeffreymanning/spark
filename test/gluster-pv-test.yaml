@@ -7,84 +7,277 @@ labels:
   app: sparkcluster-test-pv
 objects:
 
-### setup gluster endpoints; this is the previously setup gluster cluster
-#- kind: Endpoints
-#  apiVersion: v1
-#  metadata:
-#    name: glusterfs-cluster
-#    labels:
-#      name: ${MASTER_NAME}
-#      cluster: ${CLUSTER_NAME}
-#  subsets:
-#    - addresses:
-#        - ip: ${GLUSTER_CLUSTER_IP_1}
-#      ports:
-#        - port: 1
-#    - addresses:
-#        - ip: ${GLUSTER_CLUSTER_IP_2}
-#      ports:
-#        - port: 1
-#    - addresses:
-#        - ip: ${GLUSTER_CLUSTER_IP_3}
-#      ports:
-#        - port: 1
+##################################################################################
+# Define the Gluster Cluster
+##################################################################################
+## setup gluster endpoints; this is the previously setup gluster cluster
+- kind: Endpoints
+  apiVersion: v1
+  metadata:
+    name: ${CLUSTER_NAME}-glusterfs
+    labels:
+      cluster: ${CLUSTER_NAME}
+      type: glusterfs-cluster
+  subsets:
+    - addresses:
+        - ip: ${GLUSTER_CLUSTER_IP_1}
+      ports:
+        - port: 1
+    - addresses:
+        - ip: ${GLUSTER_CLUSTER_IP_2}
+      ports:
+        - port: 1
+    - addresses:
+        - ip: ${GLUSTER_CLUSTER_IP_3}
+      ports:
+        - port: 1
 
-# need a service to persist the endpoints in this namespace
-#- kind: Service
-#  apiVersion: v1
-#  metadata:
-#    name: glusterfs-cluster
-#    labels:
-#      name: ${MASTER_NAME}
-#      cluster: ${CLUSTER_NAME}
-#  spec:
-#    ports:
-#      - port: 1
+#need a service to persist the endpoints in this namespace
+# match name with endpoint name
+- kind: Service
+  apiVersion: v1
+  metadata:
+    name: ${CLUSTER_NAME}-glusterfs
+    labels:
+      cluster: ${CLUSTER_NAME}
+      type: glusterfs-cluster
+  spec:
+    ports:
+      - port: 1
 
 # setup the Persistent Volumes that will be claimed by analytics
 # note path is the name of the volume.
+# it is a test environment - therefore persistentVolumeReclaimPolicy to Delete (not Retain)
 - kind: PersistentVolume
   apiVersion: v1
   metadata:
-    name: ${GLUSTER_NAME}-scratch
+    name: ${CLUSTER_NAME}-glusterfs-scratch
     labels:
-      name: ${MASTER_NAME}
       cluster: ${CLUSTER_NAME}
-      gluster-cluster: ${GLUSTER_NAME}
+      type: glusterfs-cluster
+      gluster-cluster: ${CLUSTER_NAME}-glusterfs
   spec:
     capacity:
       storage: 2Gi
     accessModes:
       - ReadWriteMany
     glusterfs:
-      endpoints: glusterfs-cluster
-      path: scratch
+      endpoints: ${CLUSTER_NAME}-glusterfs
+      path: /scratch
       readOnly: false
-    persistentVolumeReclaimPolicy: Retain
+    persistentVolumeReclaimPolicy: Delete
 
-- kind: PersistentVolume
+# mapped to PV by access mode
+# mapped to "pod" by name in volumes section
+- kind: PersistentVolumeClaim
   apiVersion: v1
   metadata:
-    name: ${GLUSTER_NAME}-logs
+    name: ${MASTER_NAME}-scratch
     labels:
       name: ${MASTER_NAME}
       cluster: ${CLUSTER_NAME}
-      gluster-cluster: glusterfs-cluster
+      gluster-cluster: ${CLUSTER_NAME}-glusterfs
+  spec:
+    accessModes:
+    - ReadWriteMany
+    resources:
+       requests:
+         storage: 2Gi
+
+# logs...  ReadWriteOnce -
+- kind: PersistentVolume
+  apiVersion: v1
+  metadata:
+    name: ${CLUSTER_NAME}-glusterfs-logs
+    labels:
+      cluster: ${CLUSTER_NAME}
+      type: glusterfs-cluster
+      gluster-cluster: ${CLUSTER_NAME}-glusterfs
   spec:
     capacity:
       storage: 5Gi
     accessModes:
-      - ReadWriteMany
+      - ReadWriteOnce
     glusterfs:
-      endpoints: glusterfs-cluster
-      path: logs
+      endpoints: ${CLUSTER_NAME}-glusterfs
+      path: /logs
       readOnly: false
-    persistentVolumeReclaimPolicy: Retain
+    persistentVolumeReclaimPolicy: Delete
 
+# mapped to PV by access mode
+# mapped to "pod" by name in volumes section
+- kind: PersistentVolumeClaim
+  apiVersion: v1
+  metadata:
+    name: ${MASTER_NAME}-logs
+    labels:
+      name: ${MASTER_NAME}
+      cluster: ${CLUSTER_NAME}
+      gluster-cluster: ${CLUSTER_NAME}-glusterfs
+  spec:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+       requests:
+         storage: 5Gi
+
+##################################################################################
+# Define the Compute (Spark) Cluster
+##################################################################################
+- kind: Service
+  apiVersion: v1
+  metadata:
+    name: ${MASTER_NAME}
+    labels:
+      name: ${MASTER_NAME}
+  spec:
+    ports:
+      - protocol: TCP
+        port: 7077
+        targetPort: 7077
+    selector:
+      name: ${MASTER_NAME}
+
+- kind: Service
+  apiVersion: v1
+  metadata:
+    name: ${MASTER_NAME}-webui
+    labels:
+      name: ${MASTER_NAME}
+  spec:
+    ports:
+      - protocol: TCP
+        port: 8080
+        targetPort: 8080
+    selector:
+      name: ${MASTER_NAME}
+
+# 1) naming is local to this DeploymentConfig
+# volumeMounts:
+#  - name: glusterfs-data
+#
+# must match
+#
+# volumes:
+#  - name: glusterfs-data
+#
+# 2) Access to gluster volumes
+# determine ACL (group)
+#    $ ls -lZ /mnt/glusterfs/
+#    drwxrwx---. yarn hadoop system_u:object_r:fusefs_t:s0    HadoopVol
+#
+#    $ id yarn
+#    uid=592(yarn) gid=590(hadoop) groups=590(hadoop)
+#
+#        securityContext:
+#          supplementalGroups: [590]
+# 3) privileged accounts
+#            securityContext:
+#              privileged: true
+# requires a privileged account
+# see https://adam.younglogic.com/2017/06/creating-a-privileged-container-in-openshift/
+#
+# oc create serviceaccount -n <my-namespace> <my-privilegeduser>
+# oc adm policy add-scc-to-user privileged -n <my-namespace> -z <my-privilegeduser>
+# add to template (pod...)
+#    serviceAccountName:
+#      privilegeduser
+#
+# or (dangerous)
+#
+# oc adm policy add-scc-to-user privileged -n <my-namespace> -z default
+- kind: DeploymentConfig
+  apiVersion: v1
+  metadata:
+    name: ${MASTER_NAME}
+    labels:
+      cluster: ${CLUSTER_NAME}
+      type: master
+  spec:
+    strategy:
+      type: Rolling
+    triggers:
+      - type: ConfigChange
+    replicas: 1
+    selector:
+      name: ${MASTER_NAME}
+    template:
+      metadata:
+        labels:
+          name: ${MASTER_NAME}
+      spec:
+        containers:
+          - name: ${MASTER_NAME}
+            image: ${SPARK_IMAGE}
+            imagePullPolicy: "Always"
+            env:
+              - name: SPARK_MASTER_PORT
+                value: "7077"
+              - name: SPARK_MASTER_WEBUI_PORT
+                value: "8080"
+            ports:
+              - containerPort: 7077
+                protocol: TCP
+              - containerPort: 8080
+                protocol: TCP
+            volumeMounts:
+              - name: glusterfs-data
+                mountPath: /mnt/data
+                readnly: false
+        securityContext:
+          supplementalGroups: [0, 185]
+        volumes:
+          - name: glusterfs-data
+            persistentVolumeClaim:
+              claimName: ${MASTER_NAME}-scratch
+
+- kind: DeploymentConfig
+  apiVersion: v1
+  metadata:
+    name: ${WORKER_NAME}
+    labels:
+      cluster: ${CLUSTER_NAME}
+      type: worker
+  spec:
+    strategy:
+      type: Rolling
+    triggers:
+      - type: ConfigChange
+    replicas: ${WORKER_REPLICAS}
+    selector:
+      name: ${WORKER_NAME}
+    template:
+      metadata:
+        labels:
+          name: ${WORKER_NAME}
+      spec:
+        containers:
+          - name: ${WORKER_NAME}
+            image: ${SPARK_IMAGE}
+            imagePullPolicy: "Always"
+            env:
+              - name: SPARK_MASTER_ADDRESS
+                value: spark://${MASTER_NAME}:7077
+              - name: SPARK_MASTER_UI_ADDRESS
+                value: http://${MASTER_NAME}-webui:8080
+            volumeMounts:
+              - name: glusterfs-data
+                mountPath: /mnt/data
+                readnly: false
+        securityContext:
+          supplementalGroups: [0, 185]
+        volumes:
+          - name: glusterfs-data
+            persistentVolumeClaim:
+              claimName: ${MASTER_NAME}-scratch
+
+##################################################################################
+# Parameter Block
+##################################################################################
 parameters:
 - name: SPARK_IMAGE
   description: Name of the Spark master/worker image
-  value: docker.io/jeffreymanning/spark-base:latest
+  value: docker.io/jeffreymanning/spark-node:latest
 - name: CLUSTER_NAME
   description: name of cluster - applicable to spark infrastructure
   generate: expression
@@ -100,19 +293,10 @@ parameters:
   generate: expression
   from: "spark-worker-[a-z0-9]{4}"
   required: true
-- name: WORKER_RELICAS
+- name: WORKER_REPLICAS
   description: worker replica count
   value: "3"
   required: true
-# zeppelin parameters
-- name: ZEPPELIN_NAME
-  description: zeppelin name used for selector - combines with master name
-  generate: expression
-  from: "zeppelin-[a-z0-9]{4}"
-  required: true
-- name: ZEPPELIN_IMAGE
-  description: Name of the Zeppelin interface
-  value: docker.io/jeffreymanning/zeppelin:latest
 # gluster parameters
 - name: GLUSTER_NAME
   description: gluster name used for selector
@@ -131,13 +315,4 @@ parameters:
 - name: GLUSTER_CLUSTER_IP_3
   description: IP Addr 3
   value: "192.168.1.103"
-  required: true
-###  R-studio installation
-- name: RSTUDIO_IMAGE
-  description: Name of the r-studio api image
-  value: docker.io/jeffreymanning/r-studio:latest
-- name: RSTUDIO_NAME
-  description: rstudio name used as a selector
-  generate: expression
-  from: "rstudio-server-[a-z0-9]{4}"
   required: true
