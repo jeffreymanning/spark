@@ -13,6 +13,35 @@ objects:
 ## setup gluster endpoints; this is the previously setup gluster cluster
 # setup the Persistent Volumes that will be claimed by analytics
 # note path is the name of the volume.
+
+##################################################################################
+# Volume Security
+##################################################################################
+#
+# Accessing persistent storage requires coordination between the cluster and/or storage administrator
+# and the end developer. The cluster administrator creates PVs, which abstract the underlying physical storage.
+# The developer creates pods and, optionally, PVCs, which bind to PVs, based on matching criteria, such as capacity.
+#
+# Multiple persistent volume claims (PVCs) within the same project can bind to the same PV.
+# However, once a PVC binds to a PV, that PV cannot be bound by a claim outside of the first claim’s project.
+# If the underlying storage needs to be accessed by multiple projects, then each project needs its own PV,
+# which can point to the same physical storage. In this sense, a bound PV is tied to a project.
+#
+# For the cluster administrator, granting pods access to PVs involves:
+#
+#   knowing the group ID and/or user ID assigned to the actual storage,
+#   understanding SELinux considerations, and
+#   ensuring that these IDs are allowed in the range of legal IDs def[0, 185, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010]ined for the project
+#     and/or the SCC that matches the requirements of the pod.
+#
+# Group IDs, the user ID, and SELinux values are defined in the SecurityContext section in a pod definition.
+# Group IDs are global to the pod and apply to all containers defined in the pod.
+# User IDs can also be global, or specific to each container.
+#
+# The supplementalGroups IDs are typically used for controlling access to shared storage, such as NFS and GlusterFS,
+# whereas fsGroup is used for controlling access to block storage, such as Ceph RBD and iSCSI.
+#
+#           supplementalGroups: [0, 185, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010]
 - kind: PersistentVolume
   apiVersion: v1
   metadata:
@@ -174,7 +203,7 @@ objects:
 #
 # or (dangerous)
 #
-# oc adm policy add-scc-to-user privileged -n <my-namespace> -z default
+# oc adm policy add-scc-to-useThe supplementalGroups IDs are typically used for controlling access to shared storage, such as NFS and GlusterFS, whereas fsGroup is used for controlling access to block storage, such as Ceph RBD and iSCSI.r privileged -n <my-namespace> -z default
 - kind: DeploymentConfig
   apiVersion: v1
   metadata:
@@ -215,7 +244,7 @@ objects:
               - name: glusterfslogs
                 mountPath: /mnt/logs
         securityContext:
-          supplementalGroups: [0, 185]
+          supplementalGroups: [0]
         volumes:
           - name: glusterfsdata
             persistentVolumeClaim:
@@ -259,7 +288,7 @@ objects:
               - name: glusterfslogs
                 mountPath: /mnt/logs
         securityContext:
-          supplementalGroups: [0, 185]
+          supplementalGroups: [0]
         volumes:
           - name: glusterfsdata
             persistentVolumeClaim:
@@ -329,7 +358,7 @@ objects:
               - name: glusterfslogs
                 mountPath: /mnt/logs
         securityContext:
-          supplementalGroups: [0, 185]
+          supplementalGroups: [0]
         volumes:
           - name: glusterfsdata
             persistentVolumeClaim:
@@ -396,7 +425,7 @@ objects:
               - name: glusterfslogs
                 mountPath: /mnt/logs
         securityContext:
-          supplementalGroups: [0, 185]
+          supplementalGroups: [0]
         volumes:
           - name: glusterfsdata
             persistentVolumeClaim:
