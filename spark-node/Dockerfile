@@ -46,11 +46,11 @@ RUN chmod -R ug+x ${SPARK_HOME}/bin2/entrypoint && sync
 # group 0 is the root group..  this is not root privs
 # works
 # later down docker layer chain with mounted volumes
-RUN groupadd -r spark && useradd -r -s /bin/false -d ${SPARK_HOME} -u 185 -g spark spark && \
-    usermod -aG wheel spark && \
-    usermod -aG 0 spark && \
-    chown -R -L spark:0 ${SPARK_HOME} && \
-    chmod -R g=u ${SPARK_HOME}
+#RUN groupadd -r spark && useradd -r -s /bin/false -d ${SPARK_HOME} -u 185 -g spark spark && \
+#    usermod -aG wheel spark && \
+#    usermod -aG 0 spark && \
+#    chown -R -L spark:0 ${SPARK_HOME} && \
+#    chmod -R g=u ${SPARK_HOME}
 
 # RUN chown -R -L spark:spark ${SPARK_HOME}
 ENV USER_NAME=spark \
