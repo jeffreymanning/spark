@@ -10,17 +10,21 @@ LABEL name="spark-base" \
 ### Required labels above - recommended below
       io.k8s.description="Centos, Spark 2.1.1 base image, non-executable" \
       io.k8s.display-name="centos, spark ${version}.${release}" \
-      io.openshift.expose-services="" \
+      io.openshift.expose-services="spark" \
       io.openshift.tags="centos7,spark,java,maven"
 
 USER root
 
-#install the basic packages - nss_wrapper requires epel
-RUN yum clean all
-RUN yum install -y epel-release && yum -y update && yum clean all -y && rm -rf /var/cache/yum
-
-# spark pre-reqs...  if no hadoop, need log4j to install
-# none yet
+# see r-base
+##install the basic packages - nss_wrapper requires epel
+#RUN yum clean all -y && \
+## spark pre-reqs...  if no hadoop, need log4j to install
+## only java is real requirement...  but ssl and curl are used from this point forward in docker layers
+#    INSTALL_PKGS="epel-release libcurl libcurl-devel openssl openssl-devel" && \
+#    yum install -y --setopt=tsflags=nodocs ${INSTALL_PKGS} && \
+#    yum -y update && \
+#    yum clean all -y && \
+#    rm -rf /var/cache/yum
 
 ## Install Spark
 ARG SPARK_MAJOR_VERSION=2
@@ -96,7 +100,8 @@ RUN chmod -R ug+x /entrypoint.sh && sync
 # must also be in group root
 ENV USER_NAME=spark
 ENV USER_UID=1002
-RUN groupadd -r spark && \
+RUN groupadd -g ${USER_UID} ${USER_NAME} && \
+# groupadd -r spark && \
 #    useradd -r -s /bin/false -d ${SPARK_HOME} -u 185 -g 0 spark && \
 #    useradd -s /bin/false -d ${SPARK_HOME} -u 1000 -g spark spark && \
 #    useradd -d ${SPARK_HOME} -u 1000 -g spark spark && \
@@ -104,8 +109,11 @@ RUN groupadd -r spark && \
     usermod -aG wheel ${USER_NAME} && \
 #    usermod -aG spark spark && \
     usermod -aG root ${USER_NAME} && \
-    chown -R -L ${USER_NAME}:0 ${SPARK_HOME} && \
+    usermod -aG default ${USER_NAME} && \
+    chown -R -L ${USER_NAME}:root ${SPARK_HOME} && \
     chmod -R g=u ${SPARK_HOME}
+#    echo "${USER_NAME} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${USER_NAME} && \
+#    chmod 0440 /etc/sudoers.d/${USER_NAME}
 
 #RUN cp /etc/profile /etc/profile.d/spark.sh
 # SELinux
