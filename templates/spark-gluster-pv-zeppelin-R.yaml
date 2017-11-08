@@ -326,7 +326,7 @@ objects:
       type: Rolling
     triggers:
       - type: ConfigChange
-    replicas: 1
+    replicas: 0
     selector:
       name: ${ZEPPELIN_NAME}
     template:
@@ -351,6 +351,8 @@ objects:
               - name: SPARK_MASTER_UI_ADDRESS
                 value: http://${MASTER_NAME}-webui:8080
               - name: ZEPPELIN_SPARK_USEHIVECONTEXT
+                value: "false"
+              - name: ZEPPELIN_R_KNITR
                 value: "false"
             volumeMounts:
               - name: glusterfsdata
@@ -394,7 +396,7 @@ objects:
       type: Rolling
     triggers:
       - type: ConfigChange
-    replicas: 1
+    replicas: 0
     selector:
       name: ${RSTUDIO_NAME}
     template:
@@ -457,7 +459,7 @@ parameters:
   required: true
 - name: WORKER_REPLICAS
   description: worker replica count
-  value: "3"
+  value: "1"
   required: true
 # zeppelin parameters
 - name: ZEPPELIN_NAME
