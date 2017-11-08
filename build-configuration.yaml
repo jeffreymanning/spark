@@ -23,7 +23,7 @@ objects:
           name: ${ROOT}
     source:
 # if non-root git directory, need to specifiy the context dir
-     contextDir: ${CONTEXT_DIR}
+      contextDir: spark-base
       git:
         ref: ${SOURCE_REPOSITORY_REF}
         uri: ${SOURCE_REPOSITORY_URL}
