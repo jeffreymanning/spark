@@ -54,7 +54,7 @@ RUN chmod -R ug+x ${SPARK_HOME}/bin2/entrypoint && sync
 
 # RUN chown -R -L spark:spark ${SPARK_HOME}
 ENV USER_NAME=spark \
-    USER_ID=185 \
+    USER_ID=1002 \
     NSS_WRAPPER_PASSWD=/tmp/passwd \
     NSS_WRAPPER_GROUP=/tmp/group
 
