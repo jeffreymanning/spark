@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# mounting volumes (gluster) and running into permission issues.
+# Specifically within spark environment:
+#   spark nodes run as spark with within various groups (root, 185, wheel)
+#   API nodes (rstudio, zeppelin) run as normal users (rstudio and zeppelin) but are added to spark groups (root(0), 185)
+#
+# while accessing volume from different users (zeppelin) asks spark (in another container) to write out parquet file
+# groups are not give write permission (w) by default.
+# groups will require write permission
+umask 0002
+
+# spark likes to be able to lookup a username for the running UID, if
+# no name is present fake it.
+
+# move over the existing /etc/passwd into our temp
+cat /etc/passwd > ${NSS_WRAPPER_PASSWD}
+cat /etc/group > ${NSS_WRAPPER_GROUP}
+#echo "$(id -u):x:$(id -u):$(id -g):dynamic uid:$SPARK_HOME:/bin/false" >> ${NSS_WRAPPER_PASSWD}
+
+# add the user name to the last line; will always be /opt/spark (due to launch)
+echo "$(id -u):x:$(id -u):$(id -g):$(id -u):$SPARK_HOME:/bin/false" >> ${NSS_WRAPPER_PASSWD}
+#     ${USER_NAME}:x:${USER_ID}:${GROUP_ID}:${USER_NAME}:${HOME}:/bin/bash
+
+export LD_PRELOAD=libnss_wrapper.so
+
+exec "$@"
